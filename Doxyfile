@@ -1,0 +1,16 @@
+# Run from the project root: doxygen Doxyfile
+PROJECT_NAME           = "ethercat_motion"
+PROJECT_BRIEF          = "Linux EtherCAT motion control library (IgH EtherCAT Master, CiA 402)"
+OUTPUT_DIRECTORY       = build/docs
+INPUT                  = include/ethercat_motion README.md docs
+FILE_PATTERNS          = *.hpp *.h *.md
+RECURSIVE              = YES
+USE_MDFILE_AS_MAINPAGE = README.md
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = NO
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+QUIET                  = YES
+WARN_IF_UNDOCUMENTED   = NO
+JAVADOC_AUTOBRIEF      = YES
+MARKDOWN_SUPPORT       = YES

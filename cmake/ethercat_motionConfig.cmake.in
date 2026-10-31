@@ -1,0 +1,21 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}")
+
+find_dependency(Threads)
+# Needed to link the static library (private dependencies of the shared one).
+find_dependency(spdlog)
+find_dependency(yaml-cpp)
+if(@ETHERCAT_MOTION_HAVE_IGH@)
+    find_dependency(EtherCAT)
+endif()
+if(@ETHERCAT_MOTION_HAVE_MQTT@)
+    find_dependency(PahoMqttCpp)
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/ethercat_motionTargets.cmake")
+
+set(ethercat_motion_HAVE_IGH @ETHERCAT_MOTION_HAVE_IGH@)
+set(ethercat_motion_HAVE_MQTT @ETHERCAT_MOTION_HAVE_MQTT@)
+check_required_components(ethercat_motion)

@@ -1,0 +1,8 @@
+foreach(tool ethercat_scan diagnostic)
+    add_executable(${tool} ${tool}.cpp)
+    target_link_libraries(${tool} PRIVATE ethercat_motion)
+    target_compile_options(${tool} PRIVATE -Wall -Wextra)
+    install(TARGETS ${tool} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endforeach()
+set_target_properties(ethercat_scan PROPERTIES OUTPUT_NAME ethercat_motion_scan)
+set_target_properties(diagnostic PROPERTIES OUTPUT_NAME ethercat_motion_diagnostic)

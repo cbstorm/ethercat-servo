@@ -1,0 +1,149 @@
+# Hardware configuration example: one ISL-EC servo (vendor 0x0A79, product 0x5800)
+# on IgH EtherCAT Master, CSP mode, 1 ms cycle.
+#
+# !!! Every value marked VERIFY depends on the actual drive, firmware and
+# !!! mechanics. Check them against the manufacturer's EtherCAT documentation
+# !!! before enabling a motor. Example PID gains are NOT tuned for any machine.
+# !!! See docs/hardware_setup.md (commissioning checklist).
+
+ethercat:
+  backend: igh                 # igh | simulation
+  interface: "enp2s0"          # informational: the NIC is bound in /etc/ethercat.conf (MASTER0_DEVICE)
+  master_index: 0
+  cycle_time_us: 1000
+  distributed_clocks: true
+  operational_timeout_ms: 10000
+  esi_file: "../esi/LC-EH_V1.5.xml"   # used to cross-check the PDO mapping below
+  realtime:
+    enabled: true              # SCHED_FIFO (needs CAP_SYS_NICE / rtprio limit)
+    priority: 80
+    cpu_affinity: 2            # isolate this CPU (isolcpus=2) for best results; -1 = no pinning
+    lock_memory: true          # mlockall (needs CAP_IPC_LOCK / memlock limit)
+
+axes:
+  - name: axis_x
+    alias: 0
+    position: 0
+    vendor_id: 0x00000A79
+    product_code: 0x5800
+    revision: 0x0001           # VERIFY with `ethercat slaves -v`; remove to accept any revision
+
+    # Scaling: counts = units / units_per_revolution * gear_ratio * counts_per_revolution
+    counts_per_revolution: 10000   # VERIFY: drive position units per motor revolution (electronic gear)
+    gear_ratio: 1.0                # motor revolutions per load revolution
+    units_per_revolution: 5.0      # e.g. ball-screw lead in mm
+    units: "mm"
+    direction: 1
+    velocity_factor: 1.0           # VERIFY: 0x606C/0x60FF unit; 1.0 = position units per second
+    acceleration_factor: 1.0       # VERIFY: 0x6083/0x6084 unit; 1.0 = position units per second^2
+
+    operation_mode: CSP
+    allowed_modes: [CSP, CSV]
+    control_loop: none             # CSP: the drive owns position/velocity/current loops
+
+    limits:
+      soft_limits_enabled: true
+      position_min: -100.0
+      position_max: 100.0
+      position_tolerance: 0.5
+      velocity_max: 50.0
+      velocity_tolerance: 0.10
+      acceleration_max: 100.0
+      deceleration_max: 100.0
+      quick_stop_deceleration: 400.0
+      following_error_max: 2.0     # VERIFY against real servo lag at max speed
+      following_error_cycles: 3
+      torque_max: 100.0
+
+    motion:
+      velocity: 20.0
+      acceleration: 50.0
+      deceleration: 50.0
+      in_position_window: 0.01
+      in_position_time_ms: 10
+      motion_timeout_s: 0          # 0 = automatic (planned duration * 1.5 + 2 s)
+      command_watchdog_ms: 0       # stop velocity/torque commands that are not refreshed (0 = off)
+
+    homing:
+      method: 0                    # 0x6098 method; 0 = homing not configured. VERIFY supported methods.
+
+    pid:                           # only used when control_loop != none
+      kp: 1.0
+      ki: 0.0
+      kd: 0.0
+      output_min: -100.0
+      output_max: 100.0
+
+    timeouts:
+      state_transition_ms: 1000
+      fault_reset_ms: 1000
+      mode_switch_ms: 1000
+      sdo_ms: 500
+
+    dc:
+      enabled: true
+      assign_activate: 0x0300      # ESI <Dc><OpMode>DC</OpMode> AssignActivate
+      sync0_shift_us: 0
+
+    # Explicit mapping. The ISL-EC ESI default (0x1C12 = {0x1600}) does NOT map
+    # 0x6060 / 0x6071 / 0x6077; this mapping adds them. The ESI declares these
+    # objects mappable, but the firmware must accept the remapping - VERIFY.
+    # Alternative: `pdo: {source: esi}` uses the ESI default assignment and
+    # switches modes via SDO.
+    pdo:
+      source: config
+      sync_managers:
+        - index: 2
+          direction: output
+          pdos:
+            - index: 0x1600
+              entries:
+                - [0x6040, 0x00, 16, "Controlword"]
+                - [0x607A, 0x00, 32, "Target position"]
+                - [0x60FF, 0x00, 32, "Target velocity"]
+                - [0x6071, 0x00, 16, "Target torque"]
+                - [0x6060, 0x00, 8, "Modes of operation"]
+        - index: 3
+          direction: input
+          pdos:
+            - index: 0x1A00
+              entries:
+                - [0x603F, 0x00, 16, "Error code"]
+                - [0x6041, 0x00, 16, "Statusword"]
+                - [0x6064, 0x00, 32, "Position actual value"]
+                - [0x606C, 0x00, 32, "Velocity actual value"]
+                - [0x6077, 0x00, 16, "Torque actual value"]
+                - [0x60F4, 0x00, 32, "Following error actual value"]
+                - [0x6061, 0x00, 8, "Modes of operation display"]
+
+    sdo_init:
+      - {index: 0x6060, subindex: 0, size: 1, value: 8, comment: "CSP (ESI InitCmd PS)"}
+
+mqtt:
+  enabled: false
+  broker: "tcp://127.0.0.1:1883"
+  client_id: "ethercat_controller"
+  version: "3.1.1"
+  keepalive_s: 20
+  qos: 1
+  topic_prefix: "machine"
+  telemetry_interval_ms: 100
+  status_interval_ms: 1000
+  on_disconnect: stop            # none | stop | quick_stop | disable_voltage
+
+safety:
+  emergency_stop_reaction: quick_stop
+  communication_loss_reaction: disable_voltage
+  overrun_reaction: quick_stop
+  drive_fault_reaction: quick_stop   # applied to the other axes
+  limit_reaction: quick_stop
+  working_counter_error_cycles: 3
+  max_consecutive_overruns: 10
+  heartbeat_timeout_ms: 0
+  rt_watchdog_ms: 100
+  stop_all_on_axis_fault: true
+
+logging:
+  level: "info"
+  file: ""                       # e.g. /var/log/ethercat_controller.log (must be writable)
+  console: true

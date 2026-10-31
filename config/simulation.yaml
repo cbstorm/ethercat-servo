@@ -1,0 +1,121 @@
+# Simulation configuration: two mock ISL-EC drives, no hardware required.
+#  axis_x: explicit PDO mapping, CSP, PP/PV/homing allowed.
+#  axis_y: PDO mapping taken from the ESI default (no 0x6060 in the PDO, so
+#          the mode is switched by SDO), CSV with an external position loop.
+
+ethercat:
+  backend: simulation
+  master_index: 0
+  cycle_time_us: 1000
+  distributed_clocks: true
+  operational_timeout_ms: 2000
+  esi_file: "../esi/LC-EH_V1.5.xml"
+  realtime:
+    enabled: true          # falls back to normal scheduling with a warning if not permitted
+    priority: 80
+    cpu_affinity: -1
+    lock_memory: false
+
+axes:
+  - name: axis_x
+    position: 0
+    vendor_id: 0x00000A79
+    product_code: 0x5800
+    revision: 0x0001
+    counts_per_revolution: 10000
+    gear_ratio: 1.0
+    units_per_revolution: 5.0
+    units: "mm"
+    operation_mode: CSP
+    allowed_modes: [CSP, PP, PV]
+    limits:
+      position_min: -100.0
+      position_max: 100.0
+      velocity_max: 50.0
+      acceleration_max: 200.0
+      quick_stop_deceleration: 800.0
+      following_error_max: 2.0
+    motion:
+      velocity: 25.0
+      acceleration: 100.0
+      deceleration: 100.0
+      in_position_window: 0.01
+    homing:
+      method: 1
+      speed_search: 10.0
+      speed_zero: 2.0
+      acceleration: 50.0
+      timeout_s: 30
+    pdo:
+      source: config
+      sync_managers:
+        - index: 2
+          direction: output
+          pdos:
+            - index: 0x1600
+              entries:
+                - [0x6040, 0x00, 16]
+                - [0x607A, 0x00, 32]
+                - [0x60FF, 0x00, 32]
+                - [0x6071, 0x00, 16]
+                - [0x6060, 0x00, 8]
+        - index: 3
+          direction: input
+          pdos:
+            - index: 0x1A00
+              entries:
+                - [0x603F, 0x00, 16]
+                - [0x6041, 0x00, 16]
+                - [0x6064, 0x00, 32]
+                - [0x606C, 0x00, 32]
+                - [0x6077, 0x00, 16]
+                - [0x60F4, 0x00, 32]
+                - [0x6061, 0x00, 8]
+    sdo_init:
+      - {index: 0x6060, subindex: 0, size: 1, value: 8}
+
+  - name: axis_y
+    position: 1
+    vendor_id: 0x00000A79
+    product_code: 0x5800
+    revision: 0x0001
+    counts_per_revolution: 10000
+    gear_ratio: 1.0
+    units_per_revolution: 360.0
+    units: "deg"
+    operation_mode: CSV
+    control_loop: position          # library closes the position loop, drive the velocity loop
+    pid:
+      kp: 20.0
+      ki: 2.0
+      kd: 0.0
+      output_min: -90.0             # velocity correction limit (deg/s)
+      output_max: 90.0
+      derivative_filter_time: 0.005
+    limits:
+      position_min: -720.0
+      position_max: 720.0
+      velocity_max: 360.0
+      acceleration_max: 1440.0
+      following_error_max: 10.0
+      velocity_tolerance: 0.25
+    motion:
+      velocity: 180.0
+      in_position_window: 0.2
+    simulation:
+      velocity_time_constant_s: 0.005
+    pdo:
+      source: esi
+
+mqtt:
+  enabled: false
+  broker: "tcp://127.0.0.1:1883"
+  client_id: "ethercat_sim"
+  topic_prefix: "machine"
+
+safety:
+  stop_all_on_axis_fault: true
+
+logging:
+  level: "info"
+  console: true
